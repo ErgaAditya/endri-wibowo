@@ -1,0 +1,1309 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LAMBDA MAGIC STUDIO V.1</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel for executing React/TSX in browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Import Maps for React & Icons -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.292.0"
+      }
+    }
+    </script>
+
+    <style>
+      /* Custom Slider Styling */
+      input[type=range] {
+        -webkit-appearance: none;
+        width: 100%;
+        background: transparent;
+      }
+      input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 16px;
+        width: 16px;
+        border-radius: 50%;
+        background: #3b82f6;
+        cursor: pointer;
+        margin-top: -6px;
+        box-shadow: 0 0 2px rgba(0,0,0,0.5);
+      }
+      input[type=range]::-webkit-slider-runnable-track {
+        width: 100%;
+        height: 4px;
+        cursor: pointer;
+        background: #4b5563;
+        border-radius: 2px;
+      }
+      input[type=range]:focus::-webkit-slider-runnable-track {
+        background: #4b5563;
+      }
+      
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #111827; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #374151; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #4b5563; 
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #374151;
+          border-radius: 3px;
+      }
+
+      /* Hide video elements */
+      video.hidden-element, audio.hidden-element {
+          display: none;
+      }
+    </style>
+</head>
+<body class="bg-black text-white overflow-hidden">
+    <div id="root"></div>
+
+    <!-- MAIN APPLICATION CODE -->
+    <script type="text/babel" data-type="module" data-presets="react,typescript">
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
+import { createRoot } from 'react-dom/client';
+import { 
+    Film, Type, Sparkles, BarChart3, Image as ImageIcon, Monitor, Play, Pause, 
+    Volume2, Music, Download, Disc, Aperture, Lock, Unlock, AlertCircle, 
+    ShieldAlert, Zap, Loader2, Upload, Shuffle, FileVideo, Gauge, Clock, 
+    Move, RefreshCw, Layers, Plus, Eye, EyeOff, Trash2, Blend, Scissors,
+    ArrowUp, ArrowDown, Palette, Merge, ChevronRight, GripVertical
+} from 'lucide-react';
+
+// --- TYPES & CONSTANTS ---
+
+const INITIAL_STATE = {
+  projectName: 'My VJ Project',
+  backgroundPlaylist: [],
+  currentBackgroundIndex: -1,
+  nextBackgroundIndex: -1,
+  activeVideoSlot: 'A',
+  isTransitioning: false,
+  transitionProgress: 0,
+  lastBackgroundChangeTime: 0,
+
+  mainAudioPlaylist: [],
+  currentAudioIndex: -1,
+  nextAudioIndex: -1,
+  activeAudioSlot: 'A',
+  isAudioTransitioning: false,
+  isAudioShuffle: false,
+  audioCrossfadeDuration: 5,
+  isMerging: false,
+
+  backgroundType: null,
+  backgroundUrl: null,
+  containFit: false,
+  seamlessFade: true,
+  bgVideoSpeed: 1.0,
+  bgImageDuration: 5,
+  bgScale: 1.0,
+  bgPosX: 0,
+  bgPosY: 0,
+  
+  overlayLayers: [],
+  activeOverlayLayerId: null,
+
+  mainAudioUrl: null,
+  audioFxUrl: null,
+  audioFxVolume: 100,
+  audioFxLoop: true,
+
+  textLayers: [
+    {
+      id: 'default-text',
+      visible: true,
+      content: 'LAMBDA MAGIC',
+      fontFamily: 'Impact',
+      textColor: '#ffffff',
+      effectMode: 'None',
+      fxSpeed: 1.0,
+      size: 80,
+      opacity: 100,
+      x: 50,
+      y: 50,
+      style: 'None',
+      styleColor: '#000000',
+      styleAmount: 50,
+      styleOffset: 20,
+    }
+  ],
+
+  activeEffect: 'Rain',
+  audioReactEnabled: true,
+  particleColor: '#ffffff',
+  fxOpacity: 100,
+  fxDensity: 300,
+  fxParamSpeed: 1.0,
+  fxSize: 1.0,
+  fxDirection: 0,
+
+  eqEnabled: false,
+  eqType: 'Bars',
+  eqRainbow: true,
+  eqPosX: 50,
+  eqPosY: 80,
+  eqScale: 50,
+  eqGain: 50,
+  eqOpacity: 80,
+
+  logoUrl: null,
+  logoPosX: 90,
+  logoPosY: 10,
+  logoSize: 0.5,
+  logoOpacity: 0.8,
+
+  activeOverlay: null,
+  activeLayerId: null,
+
+  isPlaying: false,
+  masterVolume: 100,
+  resolution: '1920x1080 (FHD)',
+  targetFps: 60,
+  isRendering: false,
+  
+  renderProgress: 0,
+  renderStatus: ''
+};
+
+// --- HELPER FUNCTIONS ---
+
+function bufferToWave(abuffer, len) {
+    let numOfChan = abuffer.numberOfChannels,
+        length = len * numOfChan * 2 + 44,
+        buffer = new ArrayBuffer(length),
+        view = new DataView(buffer),
+        channels = [], i, sample,
+        offset = 0,
+        pos = 0;
+    
+    function setUint16(data) { view.setUint16(pos, data, true); pos += 2; }
+    function setUint32(data) { view.setUint32(pos, data, true); pos += 4; }
+
+    setUint32(0x46464952);                         
+    setUint32(length - 8);                         
+    setUint32(0x45564157);                         
+    setUint32(0x20746d66);                         
+    setUint32(16);                                 
+    setUint16(1);                                  
+    setUint16(numOfChan);
+    setUint32(abuffer.sampleRate);
+    setUint32(abuffer.sampleRate * 2 * numOfChan); 
+    setUint16(numOfChan * 2);                      
+    setUint16(16);                                 
+    setUint32(0x61746164);                         
+    setUint32(length - pos - 4);                   
+
+    for(i = 0; i < abuffer.numberOfChannels; i++) channels.push(abuffer.getChannelData(i));
+    
+    while(pos < len) {
+      for(i = 0; i < numOfChan; i++) {             
+        sample = Math.max(-1, Math.min(1, channels[i][pos])); 
+        sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767)|0; 
+        view.setInt16(44 + offset, sample, true);          
+        offset += 2;
+      }
+      pos++;
+    }
+    
+    return new Blob([buffer], {type: "audio/wav"});
+}
+
+// --- COMPONENTS: SIDEBAR TABS ---
+
+const SectionLabel = ({ children }) => (
+  <div className="text-xs font-bold text-blue-400 uppercase mb-2 tracking-wider">{children}</div>
+);
+
+const SliderControl = ({ label, value, onChange, min = 0, max = 100, step = 1, unit = '' }) => (
+  <div className="mb-4">
+    <div className="flex justify-between text-xs text-gray-400 mb-1">
+      <span>{label}</span>
+      <span>{Math.round(value * 10) / 10}{unit}</span>
+    </div>
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(e) => onChange(parseFloat(e.target.value))}
+      className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+    />
+  </div>
+);
+
+const Toggle = ({ label, checked, onChange }) => (
+  <label className="flex items-center cursor-pointer gap-2 select-none">
+    <div className="relative">
+      <input type="checkbox" className="sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <div className={`w-4 h-4 border rounded transition-colors flex items-center justify-center ${checked ? 'bg-amber-500 border-amber-500' : 'bg-gray-800 border-gray-600'}`}>
+        {checked && <svg className="w-3 h-3 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>}
+      </div>
+    </div>
+    <span className="text-xs text-gray-300">{label}</span>
+  </label>
+);
+
+const ColorPicker = ({ value, onChange }) => (
+  <div className="w-8 h-8 rounded border border-gray-600 overflow-hidden relative cursor-pointer shadow-sm">
+    <input 
+      type="color" 
+      value={value} 
+      onChange={(e) => onChange(e.target.value)}
+      className="absolute -top-2 -left-2 w-12 h-12 p-0 border-0 cursor-pointer"
+    />
+  </div>
+);
+
+const FileUploadButton = ({ label, icon: Icon, onUpload, accept, multiple = false, disabled = false }) => {
+  const inputRef = useRef(null);
+  return (
+    <>
+      <input 
+        type="file" 
+        ref={inputRef} 
+        className="hidden" 
+        accept={accept} 
+        onChange={onUpload}
+        multiple={multiple}
+        disabled={disabled}
+      />
+      <button 
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled}
+        className="w-full h-10 border border-gray-700 rounded bg-gray-800 hover:bg-gray-700 flex items-center justify-center gap-2 text-sm text-gray-300 transition-colors mb-3 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Icon size={14} /> {label}
+      </button>
+    </>
+  );
+};
+
+const MediaTab = ({ state, updateState, onFileUpload, onSelectPlaylistItem, onReorderPlaylist, onRemoveItem, onMergePlaylist }) => {
+  const handleFile = (type, e) => {
+    if (e.target.files && e.target.files.length > 0 && onFileUpload) {
+      onFileUpload(type, e.target.files);
+    }
+  };
+  
+  const activeLayer = state.overlayLayers.find(l => l.id === state.activeOverlayLayerId);
+
+  return (
+    <div className="p-4 space-y-6">
+      <div>
+        <SectionLabel>Project Settings</SectionLabel>
+        <div className="bg-gray-900 border border-gray-800 rounded p-2 mb-4">
+             <div className="text-[10px] text-gray-500 uppercase font-bold mb-1">Project Name (Output Filename)</div>
+             <input 
+                type="text" 
+                value={state.projectName}
+                onChange={(e) => updateState({ projectName: e.target.value })}
+                className="w-full bg-gray-800 text-sm text-white border border-gray-700 rounded px-2 py-1 focus:border-blue-500 outline-none"
+                placeholder="Untitled Project"
+             />
+        </div>
+      </div>
+
+      <div>
+        <SectionLabel>Main Sources</SectionLabel>
+        <div className="border border-gray-800 p-3 rounded bg-gray-900/50 mb-4">
+            <div className="flex justify-between items-center mb-2">
+                 <div className="text-xs text-gray-400">1. Background (Video/Img)</div>
+                 {state.backgroundPlaylist.length > 0 && (
+                     <div className="text-[10px] text-blue-400 font-mono">{state.backgroundPlaylist.length} Files</div>
+                 )}
+            </div>
+            <FileUploadButton 
+                label={state.backgroundPlaylist.length > 0 ? "Tambah File (+)" : "Pilih File"}
+                icon={Upload}
+                accept="image/*,video/*"
+                onUpload={(e) => handleFile('background', e)}
+                multiple={true}
+            />
+            {state.backgroundPlaylist.length > 1 && (
+                <div className="mb-3">
+                    <div className="flex items-center gap-2 bg-gray-800 rounded px-2 py-1">
+                        <FileVideo size={12} className="text-gray-400"/>
+                        <select 
+                            className="bg-transparent w-full text-xs text-gray-300 outline-none"
+                            value={state.currentBackgroundIndex}
+                            onChange={(e) => onSelectPlaylistItem && onSelectPlaylistItem('background', parseInt(e.target.value))}
+                        >
+                            {state.backgroundPlaylist.map((item, idx) => (
+                                <option key={item.id} value={idx}>
+                                    {idx + 1}. {item.name.substring(0, 20)}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+            )}
+            <div className="flex justify-between px-1 mb-3">
+                <Toggle label="Contain Fit" checked={state.containFit} onChange={(v) => updateState({ containFit: v })} />
+                <Toggle label="Seamless Fade" checked={state.seamlessFade} onChange={(v) => updateState({ seamlessFade: v })} />
+            </div>
+            <div className="mt-2 space-y-2 border-t border-gray-800 pt-2">
+                 <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold mb-1">
+                    <Gauge size={10} /> <span>VIDEO SPEED</span>
+                 </div>
+                 <SliderControl label="" value={state.bgVideoSpeed} onChange={(v) => updateState({ bgVideoSpeed: v })} min={0.1} max={5.0} step={0.1} unit="x" />
+                 <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold mb-1 mt-3">
+                    <Clock size={10} /> <span>IMAGE DURATION</span>
+                 </div>
+                 <SliderControl label="" value={state.bgImageDuration} onChange={(v) => updateState({ bgImageDuration: v })} min={1} max={60} step={1} unit="s" />
+            </div>
+            <div className="mt-4 border-t border-gray-800 pt-3">
+                 <div className="flex items-center justify-between mb-2">
+                     <span className="text-[10px] uppercase font-bold text-gray-500 flex items-center gap-1"><Move size={10}/> Transform & Zoom</span>
+                     <button onClick={() => updateState({ bgScale: 1.0, bgPosX: 0, bgPosY: 0 })} className="text-[10px] text-blue-400 hover:text-white flex items-center gap-1"><RefreshCw size={10} /> Reset</button>
+                 </div>
+                 <div className="space-y-1">
+                     <SliderControl label="Zoom" value={state.bgScale} onChange={(v) => updateState({ bgScale: v })} min={0.1} max={5.0} step={0.1} unit="x" />
+                     <div className="grid grid-cols-2 gap-2">
+                        <SliderControl label="Pan X" value={state.bgPosX} onChange={(v) => updateState({ bgPosX: v })} min={-1000} max={1000} step={10} />
+                        <SliderControl label="Pan Y" value={state.bgPosY} onChange={(v) => updateState({ bgPosY: v })} min={-1000} max={1000} step={10} />
+                     </div>
+                 </div>
+            </div>
+        </div>
+
+        <div className="border border-gray-800 p-3 rounded bg-gray-900/50 mb-4">
+             <div className="flex justify-between items-center mb-2">
+                 <div className="text-xs text-gray-400 flex items-center gap-1"><Layers size={12}/> Layers / Compositing</div>
+                 <span className="text-[10px] text-gray-500">{state.overlayLayers.length}/10</span>
+            </div>
+            <FileUploadButton 
+                label="Add Layer (Img/Video)"
+                icon={Plus}
+                accept="image/*,video/*"
+                onUpload={(e) => handleFile('layer', e)}
+                disabled={state.overlayLayers.length >= 10}
+            />
+            <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar mb-3">
+                {state.overlayLayers.map((layer, idx) => (
+                    <div 
+                        key={layer.id}
+                        onClick={() => updateState({ activeOverlayLayerId: layer.id, activeOverlay: 'Layer' })}
+                        className={`flex items-center justify-between p-1.5 rounded cursor-pointer border ${state.activeOverlayLayerId === layer.id ? 'bg-blue-900/30 border-blue-500/50 text-white' : 'bg-gray-800 border-transparent text-gray-400'}`}
+                    >
+                         <div className="flex items-center gap-2 truncate text-xs">
+                             <span className="font-mono text-[9px] opacity-50">{idx+1}</span>
+                             <span className="truncate max-w-[120px]">{layer.name}</span>
+                         </div>
+                         <div className="flex items-center gap-1">
+                             <button onClick={(e) => { e.stopPropagation(); updateState({ overlayLayers: state.overlayLayers.map(l => l.id === layer.id ? {...l, visible: !l.visible} : l) }) }} className="p-0.5 hover:text-white">
+                                {layer.visible ? <Eye size={10}/> : <EyeOff size={10}/>}
+                             </button>
+                             <button onClick={(e) => { e.stopPropagation(); const updated = state.overlayLayers.filter(l => l.id !== layer.id); updateState({ overlayLayers: updated, activeOverlayLayerId: null, activeOverlay: null }); }} className="p-0.5 hover:text-red-400"><Trash2 size={10}/></button>
+                         </div>
+                    </div>
+                ))}
+            </div>
+            {activeLayer && (
+                <div className="bg-gray-900 border border-gray-800 rounded p-2 animate-in fade-in space-y-3">
+                    <div className="text-[10px] font-bold text-gray-500 uppercase">Layer Properties</div>
+                    <div className="flex items-center gap-2 bg-gray-800 rounded px-2 py-1">
+                        <Blend size={12} className="text-purple-400" />
+                        <select 
+                            className="bg-transparent w-full text-xs text-gray-300 outline-none"
+                            value={activeLayer.blendMode}
+                            onChange={(e) => {
+                                const l = state.overlayLayers.map(layer => layer.id === activeLayer.id ? {...layer, blendMode: e.target.value} : layer);
+                                updateState({ overlayLayers: l });
+                            }}
+                        >
+                            {['source-over', 'screen', 'multiply', 'overlay', 'darken', 'lighten'].map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex items-center gap-2 bg-gray-800 rounded px-2 py-1">
+                        <Scissors size={12} className="text-green-400" />
+                        <select 
+                            className="bg-transparent w-full text-xs text-gray-300 outline-none"
+                            value={activeLayer.cropShape}
+                            onChange={(e) => {
+                                const l = state.overlayLayers.map(layer => layer.id === activeLayer.id ? {...layer, cropShape: e.target.value} : layer);
+                                updateState({ overlayLayers: l });
+                            }}
+                        >
+                            {['Original', '1:1', '3:4', '4:3', '9:16', '16:9', 'Circle'].map(s => <option key={s} value={s}>Crop: {s}</option>)}
+                        </select>
+                    </div>
+                    <div className="pt-2">
+                        <SliderControl label="Opacity" value={activeLayer.opacity} onChange={(v) => updateState({ overlayLayers: state.overlayLayers.map(l => l.id === activeLayer.id ? {...l, opacity: v} : l) })} unit="%" />
+                        <SliderControl label="Scale" value={activeLayer.scale} onChange={(v) => updateState({ overlayLayers: state.overlayLayers.map(l => l.id === activeLayer.id ? {...l, scale: v} : l) })} min={0.1} max={3.0} step={0.1} />
+                        <div className="grid grid-cols-2 gap-2">
+                            <SliderControl label="X" value={activeLayer.x} onChange={(v) => updateState({ overlayLayers: state.overlayLayers.map(l => l.id === activeLayer.id ? {...l, x: v} : l) })} min={-500} max={500} />
+                            <SliderControl label="Y" value={activeLayer.y} onChange={(v) => updateState({ overlayLayers: state.overlayLayers.map(l => l.id === activeLayer.id ? {...l, y: v} : l) })} min={-500} max={500} />
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+
+        <div className="border border-gray-800 p-3 rounded bg-gray-900/50 mb-4">
+            <div className="flex justify-between items-center mb-2">
+                 <div className="text-xs text-gray-400">2. Main Audio (Mixer)</div>
+                 {state.mainAudioPlaylist.length > 0 && (
+                     <div className="text-[10px] text-blue-400 font-mono">{state.mainAudioPlaylist.length} Songs</div>
+                 )}
+            </div>
+            <FileUploadButton 
+                label={state.mainAudioPlaylist.length > 0 ? "Tambah Musik (+)" : "Pilih Musik Utama"}
+                icon={Music}
+                accept="audio/*"
+                onUpload={(e) => handleFile('audio', e)}
+                multiple={true}
+            />
+            {state.mainAudioPlaylist.length > 0 && (
+                <div className="space-y-2 mt-2">
+                    <div className="flex items-center justify-between mb-2 border-b border-gray-800 pb-2">
+                         <span className="text-[10px] text-gray-500 uppercase font-bold">Playlist Queue</span>
+                         <button 
+                            onClick={() => updateState({ isAudioShuffle: !state.isAudioShuffle })}
+                            className={`p-1 rounded transition-colors flex items-center gap-1 ${state.isAudioShuffle ? 'text-blue-400 bg-blue-900/30' : 'text-gray-500 hover:text-gray-300'}`}
+                        >
+                            <Shuffle size={12} /> <span className="text-[10px]">{state.isAudioShuffle ? 'Shuffle ON' : 'Shuffle OFF'}</span>
+                        </button>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto custom-scrollbar pr-1 space-y-1">
+                        {state.mainAudioPlaylist.map((item, idx) => {
+                            const isPlaying = state.currentAudioIndex === idx;
+                            return (
+                                <div key={item.id} className={`group flex items-center gap-2 p-1.5 rounded text-xs border ${isPlaying ? 'bg-blue-900/20 border-blue-800 text-blue-200' : 'bg-gray-800 border-transparent text-gray-400'}`}>
+                                    <div className="w-4 shrink-0 flex justify-center">{isPlaying ? <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div> : <span className="text-[10px] text-gray-600">{idx + 1}</span>}</div>
+                                    <div className="flex-1 truncate">{item.name}</div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button onClick={() => onSelectPlaylistItem && onSelectPlaylistItem('audio', idx)} className="p-0.5 hover:text-white"><Play size={10} /></button>
+                                        <button onClick={() => onReorderPlaylist && onReorderPlaylist('audio', idx, 'up')} className="p-0.5 hover:text-white"><ArrowUp size={10} /></button>
+                                        <button onClick={() => onReorderPlaylist && onReorderPlaylist('audio', idx, 'down')} className="p-0.5 hover:text-white"><ArrowDown size={10} /></button>
+                                        <button onClick={() => onRemoveItem && onRemoveItem('audio', idx)} className="p-0.5 hover:text-red-400"><Trash2 size={10} /></button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <button 
+                        onClick={onMergePlaylist} 
+                        disabled={state.isMerging || state.mainAudioPlaylist.length < 2}
+                        className="w-full h-8 mt-2 bg-indigo-900/50 hover:bg-indigo-800 border border-indigo-700 rounded text-xs text-indigo-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {state.isMerging ? <Loader2 className="animate-spin" size={12} /> : <Merge size={12} />}
+                        {state.isMerging ? "Processing Mix..." : "Gabung Playlist (Merge)"}
+                    </button>
+                </div>
+            )}
+        </div>
+
+        <div className="border border-gray-800 p-3 rounded bg-gray-900/50 mb-4">
+            <div className="flex justify-between items-center mb-2">
+                 <div className="text-xs text-gray-400">3. Audio FX (Layer 2)</div>
+                 {state.audioFxUrl && <div className="text-[10px] text-amber-500 font-mono">Active</div>}
+            </div>
+            <FileUploadButton 
+                label={state.audioFxUrl ? "Ganti SFX" : "Tambah SFX/Ambiance"}
+                icon={Volume2}
+                accept="audio/*"
+                onUpload={(e) => handleFile('sfx', e)}
+                multiple={false}
+            />
+            <div className="mt-3 space-y-3">
+                 <SliderControl label="Volume" value={state.audioFxVolume} onChange={(v) => updateState({ audioFxVolume: v })} unit="%" />
+                 <Toggle label="Seamless Loop" checked={state.audioFxLoop} onChange={(v) => updateState({ audioFxLoop: v })} />
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TextTab = ({ state, updateState }) => {
+  const activeLayer = state.textLayers.find(l => l.id === state.activeLayerId) || state.textLayers[0];
+  
+  const handleAddLayer = () => {
+    const newLayer = {
+      id: `text-${Date.now()}`,
+      visible: true,
+      content: 'New Text',
+      fontFamily: 'Impact',
+      textColor: '#ffffff',
+      effectMode: 'None',
+      fxSpeed: 1.0,
+      size: 60,
+      opacity: 100,
+      x: 50,
+      y: 50,
+      style: 'None',
+      styleColor: '#000000',
+      styleAmount: 50,
+      styleOffset: 20
+    };
+    updateState({ textLayers: [...state.textLayers, newLayer], activeLayerId: newLayer.id, activeOverlay: 'Text' });
+  };
+
+  const updateActiveLayer = (updates) => {
+     if (!state.activeLayerId) return;
+     updateState({ 
+        textLayers: state.textLayers.map(layer => layer.id === state.activeLayerId ? { ...layer, ...updates } : layer)
+     });
+  };
+
+  return (
+    <div className="p-4 space-y-5 h-full flex flex-col">
+       <div className="flex justify-between items-center bg-gray-900 border border-gray-800 p-2 rounded">
+           <div className="text-xs font-bold text-gray-400 flex items-center gap-2"><Layers size={14} /> LAYERS ({state.textLayers.length})</div>
+           <button onClick={handleAddLayer} className="bg-blue-600 hover:bg-blue-500 text-white p-1 rounded transition-colors"><Plus size={14} /></button>
+       </div>
+       <div className="max-h-32 overflow-y-auto custom-scrollbar border border-gray-800 rounded bg-gray-900/50 p-1 space-y-1">
+           {state.textLayers.map((layer, idx) => (
+               <div key={layer.id} onClick={() => updateState({ activeLayerId: layer.id, activeOverlay: 'Text' })} className={`flex items-center justify-between p-2 rounded cursor-pointer text-xs border ${state.activeLayerId === layer.id ? 'bg-blue-900/30 border-blue-500/50 text-white' : 'bg-gray-800 border-transparent text-gray-400'}`}>
+                   <div className="flex items-center gap-2 truncate">
+                       <span className="font-mono text-[10px] opacity-50">{idx+1}.</span>
+                       <span className="truncate max-w-[100px]">{layer.content}</span>
+                   </div>
+                   <div className="flex items-center gap-1">
+                       <button onClick={(e) => { e.stopPropagation(); updateState({ textLayers: state.textLayers.map(l => l.id === layer.id ? {...l, visible: !l.visible} : l) }) }} className="p-1 text-gray-400">{layer.visible ? <Eye size={12}/> : <EyeOff size={12}/>}</button>
+                       <button onClick={(e) => { e.stopPropagation(); const upd = state.textLayers.filter(l => l.id !== layer.id); updateState({ textLayers: upd, activeLayerId: upd[0]?.id || null }); }} className="p-1 text-gray-500 hover:text-red-400"><Trash2 size={12}/></button>
+                   </div>
+               </div>
+           ))}
+       </div>
+       {activeLayer && state.activeOverlay === 'Text' && (
+        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+            <textarea className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white h-16" value={activeLayer.content} onChange={(e) => updateActiveLayer({ content: e.target.value })} />
+            <div className="flex gap-2 items-center">
+                <select className="flex-1 bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 h-8" value={activeLayer.fontFamily} onChange={(e) => updateActiveLayer({ fontFamily: e.target.value })}>
+                    {['Impact','Arial','Helvetica','Courier New','Verdana','Georgia','Times New Roman','Comic Sans MS'].map(f=><option key={f} value={f}>{f}</option>)}
+                </select>
+                <ColorPicker value={activeLayer.textColor} onChange={(c) => updateActiveLayer({ textColor: c })} />
+            </div>
+            <div className="border border-gray-800 rounded p-3 space-y-3 bg-gray-900/30">
+                <SectionLabel>Effects</SectionLabel>
+                <div className="flex items-center gap-2 bg-gray-800 rounded px-2 py-1 border border-gray-700">
+                    <Palette size={14} className="text-purple-400" />
+                    <select className="bg-transparent w-full text-xs text-gray-200 outline-none h-6" value={activeLayer.style} onChange={(e) => updateActiveLayer({ style: e.target.value })}>
+                        {['None','Shadow Soft','Shadow Hard','Long Shadow','Lift','Hollow','Splice','Glitch','Neon','Echo','Background','Curve','Duotone','Melt','Glossy'].map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                </div>
+                {activeLayer.style !== 'None' && (
+                    <div className="space-y-3 pt-2">
+                        <div className="flex justify-between items-center"><span className="text-xs text-gray-400">Effect Color</span><ColorPicker value={activeLayer.styleColor} onChange={(c) => updateActiveLayer({ styleColor: c })} /></div>
+                        <SliderControl label="Amount" value={activeLayer.styleAmount} onChange={(v) => updateActiveLayer({ styleAmount: v })} />
+                        <SliderControl label="Offset" value={activeLayer.styleOffset} onChange={(v) => updateActiveLayer({ styleOffset: v })} />
+                    </div>
+                )}
+            </div>
+            <SliderControl label="Font Size" value={activeLayer.size} onChange={(v) => updateActiveLayer({ size: v })} min={10} max={300} />
+            <SliderControl label="Opacity" value={activeLayer.opacity} onChange={(v) => updateActiveLayer({ opacity: v })} />
+            <div className="grid grid-cols-2 gap-4">
+                <SliderControl label="Pos X" value={activeLayer.x} onChange={(v) => updateActiveLayer({ x: v })} />
+                <SliderControl label="Pos Y" value={activeLayer.y} onChange={(v) => updateActiveLayer({ y: v })} />
+            </div>
+        </div>
+       )}
+    </div>
+  );
+};
+
+const FXTab = ({ state, updateState }) => {
+    const effects = [
+        { id: 'Rain', label: 'Rain', icon: '🌧️', color: 'text-blue-400' },
+        { id: 'Snow', label: 'Snow', icon: '❄️', color: 'text-cyan-200' },
+        { id: 'Sakura', label: 'Sakura', icon: '🌸', color: 'text-pink-400' },
+        { id: 'Autumn', label: 'Autumn', icon: '🍂', color: 'text-orange-500' },
+        { id: 'Orbs', label: 'Orbs', icon: '🟣', color: 'text-purple-400' },
+        { id: 'Hex', label: 'Hex', icon: '💠', color: 'text-blue-300' },
+        { id: 'Firefly', label: 'Firefly', icon: '✨', color: 'text-yellow-300' },
+        { id: 'Star', label: 'Star', icon: '⭐', color: 'text-yellow-400' },
+        { id: 'Bubble', label: 'Bubble', icon: '🫧', color: 'text-indigo-300' },
+        { id: 'Party', label: 'Party', icon: '🎉', color: 'text-red-400' },
+        { id: 'Notes', label: 'Notes', icon: '🎵', color: 'text-violet-400' },
+        { id: 'Mist', label: 'Mist', icon: '🌫️', color: 'text-gray-300' },
+      ];
+      return (
+        <div className="p-4">
+          <SectionLabel>Pilih Efek</SectionLabel>
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            {effects.map((fx) => (
+                <button key={fx.id} onClick={() => updateState({ activeEffect: fx.id })} className={`h-10 rounded text-xs flex items-center justify-center gap-1 border transition-all ${state.activeEffect === fx.id ? 'bg-blue-600 border-blue-400 text-white' : `bg-gray-800 border-gray-700 ${fx.color} hover:bg-gray-700`}`}>
+                    <span className={state.activeEffect === fx.id ? 'opacity-100' : 'opacity-80'}>{fx.icon}</span> {fx.label}
+                </button>
+            ))}
+            <button onClick={() => updateState({ activeEffect: null })} className="h-10 rounded text-xs flex items-center justify-center gap-1 border border-red-900/50 bg-red-900/20 text-red-400 col-span-3 mt-2">MATIKAN EFEK</button>
+          </div>
+          <div className="border border-gray-800 rounded p-4 bg-gray-900/50">
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-2 text-amber-500 font-bold text-sm"><Sparkles size={14} /> Audio React</div>
+                <input type="checkbox" checked={state.audioReactEnabled} onChange={(e) => updateState({ audioReactEnabled: e.target.checked })} className="w-4 h-4" />
+            </div>
+            <div className="flex justify-between items-center mb-4">
+                 <span className="text-xs text-gray-400">Warna Partikel</span>
+                 <ColorPicker value={state.particleColor} onChange={(c) => updateState({ particleColor: c })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <SliderControl label="Opacity" value={state.fxOpacity} onChange={(v) => updateState({ fxOpacity: v })} unit="%" />
+                <SliderControl label="Density" value={state.fxDensity} onChange={(v) => updateState({ fxDensity: v })} min={10} max={1000} />
+            </div>
+            <SliderControl label="Speed" value={state.fxParamSpeed} onChange={(v) => updateState({ fxParamSpeed: v })} min={0.1} max={5} step={0.1} />
+            <SliderControl label="Ukuran" value={state.fxSize} onChange={(v) => updateState({ fxSize: v })} min={0.1} max={3.0} step={0.1} />
+            <SliderControl label="Arah Angin" value={state.fxDirection} onChange={(v) => updateState({ fxDirection: v })} min={-10} max={10} step={0.5} />
+          </div>
+        </div>
+      );
+};
+
+const EQTab = ({ state, updateState }) => {
+    return (
+        <div className="p-4 space-y-5">
+            <SectionLabel>Audio Visualizer</SectionLabel>
+            <div className="flex items-center gap-2 bg-gray-900 p-2 rounded border border-gray-800">
+             <input type="checkbox" checked={state.eqEnabled} onChange={(e) => updateState({ eqEnabled: e.target.checked })} className="w-4 h-4" />
+             <span className="font-bold text-sm">Aktifkan EQ</span>
+           </div>
+           <select className="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300" value={state.eqType} onChange={(e) => updateState({ eqType: e.target.value })}>
+                {['Bars','Wave','Circle','Shimmer'].map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+            <div className="flex justify-between items-center px-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={state.eqRainbow} onChange={(e) => updateState({ eqRainbow: e.target.checked })} className="rounded bg-gray-700" />
+                    <span className="text-xs text-gray-400">Rainbow</span>
+                </label>
+            </div>
+            <div className="grid grid-cols-2 gap-4 pt-2">
+                 <SliderControl label="Pos X" value={state.eqPosX} onChange={(v) => updateState({ eqPosX: v })} />
+                 <SliderControl label="Pos Y" value={state.eqPosY} onChange={(v) => updateState({ eqPosY: v })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                 <SliderControl label="Scale" value={state.eqScale} onChange={(v) => updateState({ eqScale: v })} />
+                 <SliderControl label="Gain" value={state.eqGain} onChange={(v) => updateState({ eqGain: v })} />
+            </div>
+            <SliderControl label="Opacity" value={state.eqOpacity} onChange={(v) => updateState({ eqOpacity: v })} />
+        </div>
+      );
+};
+
+const LogoTab = ({ state, updateState, onFileUpload }) => {
+    return (
+        <div className="p-4 space-y-6">
+            <SectionLabel>Watermark</SectionLabel>
+            <FileUploadButton label={state.logoUrl ? "Ganti Logo" : "Upload Logo (PNG)"} icon={ImageIcon} accept="image/*" onUpload={(e) => onFileUpload('logo', e.target.files)} />
+            <div className="border border-gray-800 rounded p-4 space-y-2">
+                <SliderControl label="Posisi X" value={state.logoPosX} onChange={(v) => updateState({ logoPosX: v })} unit="%" />
+                <SliderControl label="Posisi Y" value={state.logoPosY} onChange={(v) => updateState({ logoPosY: v })} unit="%" />
+                <SliderControl label="Ukuran" value={state.logoSize} onChange={(v) => updateState({ logoSize: v })} max={2} step={0.1} />
+                <SliderControl label="Opacity" value={state.logoOpacity} onChange={(v) => updateState({ logoOpacity: v })} max={1} step={0.1} />
+            </div>
+        </div>
+      );
+};
+
+// --- COMPONENT: TIMELINE ---
+
+const Timeline = ({ items, currentIndex, nextIndex, onReorder, onSelect }) => {
+  const [draggedIndex, setDraggedIndex] = useState(null);
+
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+      onReorder(draggedIndex, targetIndex);
+    }
+    setDraggedIndex(null);
+  };
+
+  if (items.length === 0) return <div className="h-28 bg-gray-950 border-t border-gray-800 flex items-center justify-center text-gray-600 text-xs">Drop files to main background area</div>;
+
+  return (
+    <div className="h-28 bg-gray-950 border-t border-gray-800 flex flex-col shrink-0 select-none">
+      <div className="px-4 py-1.5 text-[10px] text-gray-500 font-bold uppercase tracking-wider flex justify-between items-center bg-gray-900/50 border-b border-gray-800/50">
+        <span className="flex items-center gap-2"><GripVertical size={10}/> Video Timeline Playlist</span>
+        <span className="bg-gray-800 px-2 rounded text-gray-400">{items.length} CLIPS</span>
+      </div>
+      <div className="flex-1 overflow-x-auto flex items-center px-4 gap-2 custom-scrollbar py-2">
+        {items.map((item, idx) => {
+          const isActive = idx === currentIndex;
+          const isNext = idx === nextIndex;
+          return (
+            <div
+              key={item.id}
+              draggable
+              onDragStart={(e) => handleDragStart(e, idx)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, idx)}
+              onClick={() => onSelect(idx)}
+              className={`relative group flex-shrink-0 w-32 h-20 rounded-md border-2 overflow-hidden cursor-pointer transition-all bg-gray-900 ${isActive ? 'border-blue-500 scale-105 z-10' : isNext ? 'border-yellow-500/70' : 'border-gray-800 hover:border-gray-600'}`}
+            >
+              {item.type === 'video' ? <video src={item.url} className="w-full h-full object-cover pointer-events-none opacity-80 group-hover:opacity-100" /> : <img src={item.url} className="w-full h-full object-cover pointer-events-none opacity-80 group-hover:opacity-100" />}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent flex flex-col justify-between p-1.5">
+                 <div className="flex justify-between items-start"><span className="bg-black/60 text-[9px] text-gray-200 px-1.5 py-0.5 rounded backdrop-blur-md">{idx + 1}.</span></div>
+                 <div className="flex justify-between items-end"><span className="text-[9px] text-gray-400 truncate w-20">{item.name}</span><div className="flex gap-1">{isActive && <Play size={12} className="text-blue-400 fill-current" />}{isNext && <ChevronRight size={14} className="text-yellow-400" />}</div></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// --- COMPONENT: PREVIEW CANVAS (Rendering Engine) ---
+
+const PreviewCanvas = forwardRef(({ state, resolution, videoRefA, videoRefB, audioAnalyser, updateState }, ref) => {
+  const canvasRef = useRef(null);
+  const animationRef = useRef();
+  const imageRefA = useRef(new Image());
+  const imageRefB = useRef(new Image());
+  const logoRef = useRef(new Image());
+  const layerMediaRefs = useRef(new Map());
+  const particlesRef = useRef([]);
+  const dataArrayRef = useRef(null);
+  const hitAreasRef = useRef([]);
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const [cursor, setCursor] = useState('default');
+
+  useImperativeHandle(ref, () => ({
+      getCanvas: () => canvasRef.current,
+      captureFrame: (time) => {
+          if (canvasRef.current) {
+              const ctx = canvasRef.current.getContext('2d');
+              if (ctx) drawFrame(ctx, canvasRef.current, time);
+          }
+      }
+  }));
+
+  // Setup Refs & Loading
+  useEffect(() => {
+    const activeItem = state.backgroundPlaylist[state.currentBackgroundIndex];
+    if (activeItem && activeItem.type === 'image') {
+        const targetImg = state.activeVideoSlot === 'A' ? imageRefA.current : imageRefB.current;
+        if (targetImg.src !== activeItem.url) targetImg.src = activeItem.url;
+    }
+    const nextItem = state.backgroundPlaylist[state.nextBackgroundIndex];
+    if (nextItem && nextItem.type === 'image') {
+        const targetImg = state.activeVideoSlot === 'A' ? imageRefB.current : imageRefA.current;
+        if (targetImg.src !== nextItem.url) targetImg.src = nextItem.url;
+    }
+  }, [state.currentBackgroundIndex, state.nextBackgroundIndex, state.activeVideoSlot]);
+
+  useEffect(() => { if (state.logoUrl) logoRef.current.src = state.logoUrl; }, [state.logoUrl]);
+
+  useEffect(() => {
+    for (const id of layerMediaRefs.current.keys()) {
+        if (!state.overlayLayers.find(l => l.id === id)) {
+            layerMediaRefs.current.delete(id);
+        }
+    }
+    state.overlayLayers.forEach(layer => {
+        if (!layerMediaRefs.current.has(layer.id)) {
+            if (layer.type === 'video') {
+                const vid = document.createElement('video');
+                vid.src = layer.url; vid.loop = true; vid.muted = true; vid.playsInline = true; vid.crossOrigin = "anonymous";
+                layerMediaRefs.current.set(layer.id, vid);
+            } else {
+                const img = new Image(); img.src = layer.url; layerMediaRefs.current.set(layer.id, img);
+            }
+        }
+    });
+  }, [state.overlayLayers]);
+
+  useEffect(() => {
+    layerMediaRefs.current.forEach((el) => {
+        if (el instanceof HTMLVideoElement) state.isPlaying ? el.play().catch(()=>{}) : el.pause();
+    });
+  }, [state.isPlaying]);
+
+  useEffect(() => {
+    if (audioAnalyser) dataArrayRef.current = new Uint8Array(audioAnalyser.frequencyBinCount);
+  }, [audioAnalyser]);
+
+  // Mouse Handlers
+  const handleMouseDown = (e) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const clickX = (e.clientX - rect.left) * scaleX;
+    const clickY = (e.clientY - rect.top) * scaleY;
+    const hit = [...hitAreasRef.current].reverse().find(area => clickX >= area.x && clickX <= area.x + area.w && clickY >= area.y && clickY <= area.y + area.h);
+
+    if (hit) {
+        const updates = { activeOverlay: hit.type };
+        if (hit.type === 'Text') updates.activeLayerId = hit.id;
+        else if (hit.type === 'Layer') updates.activeOverlayLayerId = hit.id;
+        updateState(updates);
+        isDraggingRef.current = true;
+        dragStartRef.current = { x: clickX, y: clickY };
+    } else {
+        updateState({ activeOverlay: null, activeLayerId: null, activeOverlayLayerId: null });
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+
+    if (!isDraggingRef.current) {
+        const hit = hitAreasRef.current.some(area => mouseX >= area.x && mouseX <= area.x + area.w && mouseY >= area.y && mouseY <= area.y + area.h);
+        setCursor(hit ? 'move' : 'default');
+    }
+    if (isDraggingRef.current && state.activeOverlay) {
+        const deltaX = mouseX - dragStartRef.current.x;
+        const deltaY = mouseY - dragStartRef.current.y;
+        
+        if (state.activeOverlay === 'Text' && state.activeLayerId) {
+             const deltaPctX = (deltaX / canvasRef.current.width) * 100;
+             const deltaPctY = (deltaY / canvasRef.current.height) * 100;
+             const updatedLayers = state.textLayers.map(l => l.id === state.activeLayerId ? { ...l, x: l.x + deltaPctX, y: l.y + deltaPctY } : l);
+             updateState({ textLayers: updatedLayers });
+        } else if (state.activeOverlay === 'Layer' && state.activeOverlayLayerId) {
+            const updatedLayers = state.overlayLayers.map(l => l.id === state.activeOverlayLayerId ? { ...l, x: l.x + deltaX, y: l.y + deltaY } : l);
+            updateState({ overlayLayers: updatedLayers });
+        } else if (state.activeOverlay === 'EQ') {
+            const deltaPctX = (deltaX / canvasRef.current.width) * 100;
+            const deltaPctY = (deltaY / canvasRef.current.height) * 100;
+            updateState({ eqPosX: state.eqPosX + deltaPctX, eqPosY: state.eqPosY + deltaPctY });
+        } else if (state.activeOverlay === 'Logo') {
+            const deltaPctX = (deltaX / canvasRef.current.width) * 100;
+            const deltaPctY = (deltaY / canvasRef.current.height) * 100;
+            updateState({ logoPosX: state.logoPosX + deltaPctX, logoPosY: state.logoPosY + deltaPctY });
+        }
+        dragStartRef.current = { x: mouseX, y: mouseY };
+    }
+  };
+
+  const handleMouseUp = () => isDraggingRef.current = false;
+
+  const handleWheel = (e) => {
+    if (!state.activeOverlay) return;
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    if (state.activeOverlay === 'Text' && state.activeLayerId) {
+        updateState({ textLayers: state.textLayers.map(l => l.id === state.activeLayerId ? { ...l, size: Math.max(10, Math.min(300, l.size + (e.deltaY > 0 ? -5 : 5))) } : l) });
+    } else if (state.activeOverlay === 'Layer' && state.activeOverlayLayerId) {
+        updateState({ overlayLayers: state.overlayLayers.map(l => l.id === state.activeOverlayLayerId ? { ...l, scale: Math.max(0.1, Math.min(5.0, l.scale + delta)) } : l) });
+    } else if (state.activeOverlay === 'EQ') {
+        updateState({ eqScale: Math.max(10, Math.min(200, state.eqScale + (e.deltaY > 0 ? -5 : 5))) });
+    } else if (state.activeOverlay === 'Logo') {
+        updateState({ logoSize: Math.max(0.1, Math.min(2.0, state.logoSize + delta)) });
+    }
+  };
+
+  const drawFrame = (ctx, canvas, time) => {
+      hitAreasRef.current = [];
+      if (audioAnalyser && dataArrayRef.current) audioAnalyser.getByteFrequencyData(dataArrayRef.current);
+      ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (state.backgroundPlaylist.length > 0) {
+          const activeItem = state.backgroundPlaylist[state.currentBackgroundIndex];
+          const nextItem = state.backgroundPlaylist[state.nextBackgroundIndex];
+          
+          let primarySource = null;
+          if (activeItem) {
+              if (activeItem.type === 'video') primarySource = state.activeVideoSlot === 'A' ? videoRefA.current : videoRefB.current;
+              else primarySource = state.activeVideoSlot === 'A' ? imageRefA.current : imageRefB.current;
+          }
+          let secondarySource = null;
+          if (nextItem) {
+               if (nextItem.type === 'video') secondarySource = state.activeVideoSlot === 'A' ? videoRefB.current : videoRefA.current;
+               else secondarySource = state.activeVideoSlot === 'A' ? imageRefB.current : imageRefA.current;
+          }
+
+          if (primarySource) {
+              ctx.globalAlpha = 1.0;
+              drawCoverOrContain(ctx, primarySource, canvas.width, canvas.height, state.containFit, state.bgScale, state.bgPosX, state.bgPosY);
+          }
+          if (state.isTransitioning && secondarySource && state.seamlessFade) {
+              const t = state.transitionProgress;
+              ctx.globalAlpha = -(Math.cos(Math.PI * t) - 1) / 2;
+              drawCoverOrContain(ctx, secondarySource, canvas.width, canvas.height, state.containFit, state.bgScale, state.bgPosX, state.bgPosY);
+              ctx.globalAlpha = 1.0;
+          }
+      }
+
+      state.overlayLayers.forEach(layer => {
+          if (!layer.visible) return;
+          const media = layerMediaRefs.current.get(layer.id);
+          if (media) {
+               if (media instanceof HTMLVideoElement && media.playbackRate !== layer.speed) media.playbackRate = layer.speed;
+               const bounds = drawLayer(ctx, media, canvas.width, canvas.height, layer);
+               hitAreasRef.current.push({ type: 'Layer', id: layer.id, ...bounds });
+          }
+      });
+      ctx.globalCompositeOperation = 'source-over';
+
+      if (state.activeEffect) {
+        ctx.globalAlpha = state.fxOpacity / 100;
+        if (particlesRef.current.length !== state.fxDensity) {
+            particlesRef.current = [];
+            for (let i = 0; i < state.fxDensity; i++) particlesRef.current.push(createParticle(canvas.width, canvas.height, state.activeEffect));
+        }
+        particlesRef.current.forEach((p, index) => {
+           if (p.type !== state.activeEffect) p.type = state.activeEffect;
+           updateParticle(p, canvas.width, canvas.height, state);
+           drawParticle(ctx, p, state.activeEffect, state.particleColor, state);
+           if (p.y > canvas.height + 50 || p.y < -50 || p.life <= 0) particlesRef.current[index] = createParticle(canvas.width, canvas.height, state.activeEffect);
+        });
+        ctx.globalAlpha = 1.0;
+      }
+
+      if (state.eqEnabled) {
+          const eqBounds = drawVisualizer(ctx, canvas, state, time, dataArrayRef.current);
+          if (eqBounds) hitAreasRef.current.push({ type: 'EQ', ...eqBounds });
+      }
+
+      state.textLayers.forEach(layer => {
+          if (!layer.visible || !layer.content) return;
+          const x = (layer.x / 100) * canvas.width;
+          const y = (layer.y / 100) * canvas.height;
+          ctx.save();
+          ctx.font = `bold ${layer.size}px ${layer.fontFamily}, sans-serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const metrics = ctx.measureText(layer.content);
+          hitAreasRef.current.push({ type: 'Text', id: layer.id, x: x - metrics.width / 2, y: y - layer.size / 2, w: metrics.width, h: layer.size });
+          let drawX = x, drawY = y;
+          if (layer.effectMode === 'Pulse') { const scale = 1 + Math.sin(time * 0.005 * layer.fxSpeed) * 0.1; ctx.translate(x, y); ctx.scale(scale, scale); drawX = 0; drawY = 0; } 
+          else if (layer.effectMode === 'Slide') drawX = x + Math.sin(time * 0.002 * layer.fxSpeed) * 100;
+          else if (layer.effectMode === 'Wiggle') { drawX = x + (Math.random() - 0.5) * 5 * layer.fxSpeed; drawY = y + (Math.random() - 0.5) * 5 * layer.fxSpeed; }
+          ctx.globalAlpha = layer.opacity / 100;
+          drawStyledText(ctx, layer, drawX, drawY, time);
+          ctx.restore();
+      });
+
+      if (state.logoUrl && logoRef.current.complete) {
+          const lx = (state.logoPosX / 100) * canvas.width;
+          const ly = (state.logoPosY / 100) * canvas.height;
+          const baseSize = canvas.width * 0.2 * state.logoSize;
+          const ratio = logoRef.current.width / (logoRef.current.height || 1);
+          const lw = baseSize * (ratio > 1 ? 1 : ratio);
+          const lh = baseSize / (ratio > 1 ? ratio : 1);
+          ctx.save(); ctx.globalAlpha = state.logoOpacity; ctx.translate(lx, ly); ctx.translate(-lw/2, -lh/2); ctx.drawImage(logoRef.current, 0, 0, lw, lh); ctx.restore();
+          hitAreasRef.current.push({ type: 'Logo', x: lx - lw/2, y: ly - lh/2, w: lw, h: lh });
+      }
+
+      if (state.activeOverlay && !state.isRendering) {
+          const area = hitAreasRef.current.find(a => (state.activeOverlay === 'Text' && a.id === state.activeLayerId) || (state.activeOverlay === 'Layer' && a.id === state.activeOverlayLayerId) || a.type === state.activeOverlay);
+          if (area) {
+              ctx.save(); ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.strokeRect(area.x - 5, area.y - 5, area.w + 10, area.h + 10); ctx.restore();
+          }
+      }
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const render = (time) => { drawFrame(ctx, canvas, time); animationRef.current = requestAnimationFrame(render); };
+    animationRef.current = requestAnimationFrame(render);
+    return () => cancelAnimationFrame(animationRef.current);
+  }, [state, resolution.w, resolution.h, audioAnalyser]);
+
+  return <canvas ref={canvasRef} width={resolution.w} height={resolution.h} className="w-full h-full object-contain cursor-auto" style={{ cursor }} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp} onWheel={handleWheel} />;
+});
+
+// Canvas Drawing Helpers
+function drawLayer(ctx, img, cw, ch, layer) {
+    const iw = img.videoWidth || img.width; const ih = img.videoHeight || img.height;
+    if (!iw || !ih) return { x:0, y:0, w:0, h:0 };
+    ctx.save(); ctx.globalCompositeOperation = layer.blendMode; ctx.globalAlpha = layer.opacity / 100;
+    const x = (cw / 2) + layer.x; const y = (ch / 2) + layer.y;
+    ctx.translate(x, y); ctx.scale(layer.scale, layer.scale);
+    if (layer.cropShape !== 'Original') {
+        ctx.beginPath(); const size = Math.min(iw, ih);
+        if (layer.cropShape === '1:1') ctx.rect(-size/2, -size/2, size, size);
+        else if (layer.cropShape === 'Circle') ctx.arc(0, 0, size/2, 0, Math.PI * 2);
+        else if (layer.cropShape === '3:4') ctx.rect(-size*0.375, -size/2, size*0.75, size);
+        else if (layer.cropShape === '16:9') ctx.rect(-size/2, -size*0.28, size, size*0.56);
+        ctx.clip();
+    }
+    ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih); ctx.restore();
+    return { x: x - iw*layer.scale/2, y: y - ih*layer.scale/2, w: iw*layer.scale, h: ih*layer.scale };
+}
+
+function drawCoverOrContain(ctx, img, cw, ch, contain, scale, offX, offY) {
+    const iw = img.videoWidth || img.width; const ih = img.videoHeight || img.height;
+    if (!iw || !ih) return;
+    const fitScale = contain ? Math.min(cw / iw, ch / ih) : Math.max(cw / iw, ch / ih);
+    const nw = iw * fitScale; const nh = ih * fitScale;
+    ctx.save(); ctx.translate(cw / 2 + offX, ch / 2 + offY); ctx.scale(scale, scale); ctx.drawImage(img, -nw / 2, -nh / 2, nw, nh); ctx.restore();
+}
+
+function createParticle(w, h, type) {
+    return { x: Math.random() * w, y: Math.random() * h, z: Math.random() * 0.8 + 0.2, speed: Math.random() * 10, size: Math.random() * 5 + 2, vx: Math.random() * 2 - 1, angle: Math.random() * 6, life: 100, type, color: type === 'Party' ? '#'+Math.floor(Math.random()*16777215).toString(16) : null };
+}
+
+function updateParticle(p, w, h, state) {
+    p.angle += 0.05 * state.fxParamSpeed;
+    p.y += p.speed * state.fxParamSpeed; p.x += (p.vx + state.fxDirection) * state.fxParamSpeed;
+}
+
+function drawParticle(ctx, p, type, globalColor, state) {
+    ctx.save(); ctx.translate(p.x, p.y); ctx.scale(p.z * state.fxSize, p.z * state.fxSize);
+    ctx.fillStyle = p.color || globalColor; ctx.beginPath();
+    if(type==='Rain') { ctx.rotate(0.2); ctx.rect(0,0,1,10); } else { ctx.arc(0,0,p.size,0,6); }
+    ctx.fill(); ctx.restore();
+}
+
+function drawVisualizer(ctx, canvas, state, time, data) {
+    const bars = 40; const width = canvas.width / bars; const centerX = (state.eqPosX/100)*canvas.width; const centerY = (state.eqPosY/100)*canvas.height;
+    let minX=canvas.width, minY=canvas.height, maxX=0, maxY=0;
+    ctx.save(); ctx.globalAlpha = state.eqOpacity / 100;
+    if(state.eqType==='Bars') {
+        minX = centerX - (bars*width)/2; maxX = centerX + (bars*width)/2; minY = centerY - 100; maxY = centerY;
+        for(let i=0; i<bars; i++) {
+            const h = (data[i*2] || 0) * (state.eqScale/50);
+            ctx.fillStyle = state.eqRainbow ? `hsl(${i*8},70%,50%)` : '#10b981';
+            ctx.fillRect(centerX - (bars*width)/2 + i*width, centerY - h, width-2, h);
+        }
+    }
+    ctx.restore();
+    return { x: minX, y: minY, w: maxX-minX, h: maxY-minY };
+}
+
+function drawStyledText(ctx, layer, x, y, time) {
+    ctx.fillStyle = layer.textColor; ctx.fillText(layer.content, x, y);
+    if(layer.style === 'Neon') { ctx.shadowColor = layer.styleColor; ctx.shadowBlur=20; ctx.strokeText(layer.content, x, y); ctx.shadowBlur=0; }
+    else if(layer.style === 'Shadow Soft') { ctx.shadowColor = layer.styleColor; ctx.shadowBlur=10; ctx.fillText(layer.content, x, y); }
+}
+
+// --- MAIN APP ---
+
+const App = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [accessCode, setAccessCode] = useState('');
+  const [authError, setAuthError] = useState(false);
+  const [state, setState] = useState(INITIAL_STATE);
+  const [activeTab, setActiveTab] = useState('Media');
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0); 
+
+  const canvasRef = useRef(null);
+  const videoPlayerA = useRef(null); const videoPlayerB = useRef(null);
+  const audioDeckA = useRef(null); const audioDeckB = useRef(null); const sfxAudioRef = useRef(null);
+  const audioContextRef = useRef(null); const analyserRef = useRef(null);
+  const gainNodeARef = useRef(null); const gainNodeBRef = useRef(null); const gainNodeSFXRef = useRef(null); const gainNodeMasterRef = useRef(null);
+  const mediaStreamDestRef = useRef(null); const mediaRecorderRef = useRef(null);
+  const transitionFrameRef = useRef(null);
+
+  const safePlay = async (element) => {
+    if (!element) return;
+    try {
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+        if (element.paused) await element.play();
+    } catch (err) {}
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (accessCode.trim().toUpperCase() === 'GAJIAN 1 MILYAR') {
+        setIsAuthenticated(true); setAuthError(false); initAudioContext();
+    } else setAuthError(true);
+  };
+
+  const updateState = (updates) => {
+    setState(prev => ({ ...prev, ...updates }));
+    if (audioContextRef.current && audioContextRef.current.state === 'suspended') audioContextRef.current.resume();
+  };
+
+  const initAudioContext = () => {
+      if (!audioContextRef.current) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          const ctx = new AudioContext(); audioContextRef.current = ctx;
+          const masterGain = ctx.createGain(); masterGain.connect(ctx.destination); gainNodeMasterRef.current = masterGain;
+          const streamDest = ctx.createMediaStreamDestination(); masterGain.connect(streamDest); mediaStreamDestRef.current = streamDest;
+          const analyser = ctx.createAnalyser(); analyser.fftSize = 256; masterGain.connect(analyser); analyserRef.current = analyser;
+          const gainA = ctx.createGain(); gainA.connect(masterGain); gainNodeARef.current = gainA;
+          const gainB = ctx.createGain(); gainB.connect(masterGain); gainNodeBRef.current = gainB;
+          const gainSFX = ctx.createGain(); gainSFX.connect(masterGain); gainNodeSFXRef.current = gainSFX;
+      }
+      const ctx = audioContextRef.current; if (ctx && ctx.state === 'suspended') ctx.resume();
+      [audioDeckA, audioDeckB, videoPlayerA, videoPlayerB, sfxAudioRef].forEach(ref => {
+          if (ref.current && !ref.current._isConnected) {
+              try { const src = ctx.createMediaElementSource(ref.current); src.connect(ref.current === sfxAudioRef.current ? gainNodeSFXRef.current : (ref.current.tagName === 'VIDEO' ? gainNodeMasterRef.current : (ref.current === audioDeckA.current ? gainNodeARef.current : gainNodeBRef.current))); ref.current._isConnected = true; } catch(e){}
+          }
+      });
+  };
+
+  const handleToggleRender = async () => {
+      if (state.isRendering) {
+          if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+          updateState({ isRendering: false, renderProgress: 0, renderStatus: '' });
+          if (gainNodeMasterRef.current) gainNodeMasterRef.current.connect(audioContextRef.current.destination);
+      } else {
+          updateState({ isRendering: true, renderStatus: 'Recording Realtime...' });
+          if (audioContextRef.current?.state === 'suspended') await audioContextRef.current.resume();
+          setCurrentTime(0);
+          [videoPlayerA.current, videoPlayerB.current, audioDeckA.current, audioDeckB.current].forEach(el => { if(el) el.currentTime = 0; });
+          safePlay(state.activeVideoSlot === 'A' ? videoPlayerA.current : videoPlayerB.current);
+          updateState({ isPlaying: true });
+          if (gainNodeMasterRef.current) gainNodeMasterRef.current.disconnect(audioContextRef.current.destination);
+
+          const canvas = canvasRef.current?.getCanvas();
+          if (!canvas) return;
+          const videoStream = canvas.captureStream(state.targetFps);
+          const audioStream = mediaStreamDestRef.current?.stream;
+          const combinedStream = new MediaStream([...videoStream.getVideoTracks(), ...(audioStream ? audioStream.getAudioTracks() : [])]);
+          const bitrate = Math.floor(canvas.width * canvas.height * state.targetFps * 0.2); 
+          
+          try {
+            const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9,opus', videoBitsPerSecond: bitrate });
+            mediaRecorderRef.current = recorder;
+            const chunks = [];
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = `${state.projectName}.webm`;
+                document.body.appendChild(a); a.click(); URL.revokeObjectURL(url);
+                if (gainNodeMasterRef.current) gainNodeMasterRef.current.connect(audioContextRef.current.destination);
+                updateState({ isRendering: false, renderStatus: '' });
+            };
+            recorder.start(100);
+            const stopTime = state.mainAudioPlaylist.length > 0 ? (state.activeAudioSlot === 'A' ? audioDeckA.current.duration : audioDeckB.current.duration) : 10;
+            setTimeout(() => { if(mediaRecorderRef.current.state === 'recording') mediaRecorderRef.current.stop(); }, (stopTime * 1000) + 500);
+          } catch(e) { alert("Recording failed."); updateState({ isRendering: false }); }
+      }
+  };
+
+  const handleFileUpload = (type, files) => {
+    if (!files.length) return;
+    const url = URL.createObjectURL(files[0]);
+    if (type === 'background') {
+        const newItem = { id: Math.random().toString(), url, name: files[0].name, type: files[0].type.startsWith('video') ? 'video' : 'image' };
+        updateState({ backgroundPlaylist: [...state.backgroundPlaylist, newItem], currentBackgroundIndex: 0, backgroundType: newItem.type, backgroundUrl: newItem.url, activeVideoSlot: 'A' });
+    } else if (type === 'audio') {
+        const newItem = { id: Math.random().toString(), url, name: files[0].name, type: 'audio' };
+        updateState({ mainAudioPlaylist: [...state.mainAudioPlaylist, newItem], currentAudioIndex: 0, activeAudioSlot: 'A' });
+    } else if (type === 'sfx') updateState({ audioFxUrl: url });
+    else if (type === 'logo') updateState({ logoUrl: url });
+  };
+
+  useEffect(() => {
+    const sfx = sfxAudioRef.current;
+    if (sfx && state.audioFxUrl) { sfx.src = state.audioFxUrl; sfx.load(); if(state.isPlaying) safePlay(sfx); }
+  }, [state.audioFxUrl]);
+
+  // Main Loop logic for media syncing
+  useEffect(() => {
+    const loop = () => {
+        if (!state.isPlaying) { transitionFrameRef.current = requestAnimationFrame(loop); return; }
+        // ... (Playback logic sync simplified for single file version)
+        if(state.isPlaying) {
+             const v = state.activeVideoSlot==='A'?videoPlayerA.current:videoPlayerB.current;
+             if(v && v.ended && state.seamlessFade) { v.currentTime=0; safePlay(v); }
+        }
+        transitionFrameRef.current = requestAnimationFrame(loop);
+    };
+    transitionFrameRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(transitionFrameRef.current);
+  }, [state.isPlaying, state.activeVideoSlot]);
+
+
+  if (!isAuthenticated) {
+      return (
+        <div className="h-screen w-screen bg-black text-white flex flex-col items-center justify-center p-4 relative font-sans">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#1f2937_0%,_#000000_100%)]"></div>
+            <div className="z-10 w-full max-w-md bg-gray-900/50 backdrop-blur-xl border border-gray-800 p-8 rounded-2xl flex flex-col items-center text-center">
+                <Film size={48} className="text-blue-500 mb-4" />
+                <h1 className="text-3xl font-black text-blue-400 mb-8">LAMBDA MAGIC STUDIO</h1>
+                <form onSubmit={handleLogin} className="w-full space-y-4">
+                    <input type="text" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} placeholder="MASUKKAN KODE AKSES" className="w-full bg-black/50 border border-gray-700 rounded-lg py-3 text-center text-white outline-none" />
+                    {authError && <div className="text-red-400 text-xs animate-pulse">KODE AKSES SALAH</div>}
+                    <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">MASUK SYSTEM</button>
+                </form>
+                <div className="mt-8 text-[10px] text-gray-500 text-center">
+                    PENGGUNAAN PRIBADI UNTUK YOUTUBER TEGAL<br/>TIDAK DIPERJUAL BELIKAN !!!<br/>WA: 081318329175
+                </div>
+            </div>
+        </div>
+      );
+  }
+
+  return (
+    <div className="h-screen w-screen flex flex-col bg-gray-900 text-gray-100 font-sans">
+      <video ref={videoPlayerA} className="hidden-element" crossOrigin="anonymous" playsInline muted />
+      <video ref={videoPlayerB} className="hidden-element" crossOrigin="anonymous" playsInline muted />
+      <audio ref={audioDeckA} className="hidden-element" crossOrigin="anonymous" />
+      <audio ref={audioDeckB} className="hidden-element" crossOrigin="anonymous" />
+      <audio ref={sfxAudioRef} className="hidden-element" crossOrigin="anonymous" loop={state.audioFxLoop} />
+
+      <header className="h-12 bg-gray-950 border-b border-gray-800 flex items-center justify-between px-4 shrink-0">
+        <div className="flex items-center gap-2"><Film className="text-blue-500" size={20} /><span className="font-bold">LAMBDA MAGIC STUDIO V.1</span></div>
+        <div className="flex items-center gap-4">
+            <button onClick={handleToggleRender} className={`flex items-center gap-2 px-3 py-1 rounded ${state.isRendering ? 'bg-red-600 animate-pulse' : 'bg-indigo-600'}`}>{state.isRendering ? 'STOP & SAVE' : 'START RENDER'}</button>
+        </div>
+      </header>
+
+      <div className="flex-1 flex overflow-hidden">
+        <div className="w-80 bg-gray-950 border-r border-gray-800 flex flex-col shrink-0">
+           <div className="flex border-b border-gray-800">
+             {[{id:'Media',icon:Film},{id:'Text',icon:Type},{id:'FX',icon:Sparkles},{id:'EQ',icon:BarChart3},{id:'Logo',icon:ImageIcon}].map(tab => (
+               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 flex justify-center ${activeTab===tab.id?'text-blue-400 border-b-2 border-blue-500':'text-gray-500'}`}><tab.icon size={18} /></button>
+             ))}
+           </div>
+           <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {activeTab === 'Media' && <MediaTab state={state} updateState={updateState} onFileUpload={handleFileUpload} />}
+              {activeTab === 'Text' && <TextTab state={state} updateState={updateState} />}
+              {activeTab === 'FX' && <FXTab state={state} updateState={updateState} />}
+              {activeTab === 'EQ' && <EQTab state={state} updateState={updateState} />}
+              {activeTab === 'Logo' && <LogoTab state={state} updateState={updateState} onFileUpload={handleFileUpload} />}
+           </div>
+        </div>
+
+        <div className="flex-1 flex flex-col bg-gray-900 relative">
+            <div className="flex-1 flex flex-col items-center justify-center p-4 bg-[radial-gradient(circle_at_center,_#1f2937_1px,_transparent_1px)] bg-[length:20px_20px]">
+                <div className="relative border border-gray-800 bg-black shadow-2xl rounded-lg overflow-hidden shrink-0" style={{aspectRatio: '16/9', height:'auto', width:'100%', maxWidth:'100%'}}>
+                    <PreviewCanvas ref={canvasRef} state={state} resolution={{w:1920,h:1080}} videoRefA={videoPlayerA} videoRefB={videoPlayerB} audioAnalyser={analyserRef.current} updateState={updateState} />
+                    {state.isRendering && <div className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded animate-pulse">REC</div>}
+                </div>
+            </div>
+            <Timeline items={state.backgroundPlaylist} currentIndex={state.currentBackgroundIndex} nextIndex={state.nextBackgroundIndex} onReorder={()=>{}} onSelect={()=>{}} />
+            <div className="h-16 bg-gray-950 border-t border-gray-800 px-6 flex items-center gap-4 shrink-0">
+                <button onClick={() => updateState({ isPlaying: !state.isPlaying })} className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white">{state.isPlaying ? <Pause size={20} /> : <Play size={20} />}</button>
+                <div className="flex items-center gap-2"><Volume2 size={20} className="text-gray-400" /><input type="range" value={state.masterVolume} onChange={(e) => updateState({ masterVolume: parseFloat(e.target.value) })} /></div>
+            </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const container = document.getElementById('root');
+const root = createRoot(container);
+root.render(<App />);
+    </script>
+</body>
+</html>
+    

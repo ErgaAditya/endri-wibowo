@@ -1,5 +1,3 @@
-
-
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import { VJState, TextLayer, OverlayLayer } from '../types';
 
@@ -28,7 +26,8 @@ export interface CanvasHandle {
 
 export const PreviewCanvas = forwardRef<CanvasHandle, PreviewCanvasProps>(({ state, resolution, videoRefA, videoRefB, audioAnalyser, updateState }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
+  // Fixed: Initialize with 0 to satisfy TypeScript definition expecting 1 argument
+  const animationRef = useRef<number>(0);
   
   // DUAL IMAGE REFS
   const imageRefA = useRef<HTMLImageElement>(new Image());

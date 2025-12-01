@@ -84,7 +84,8 @@ const App = () => {
   const mediaStreamDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
-  const transitionFrameRef = useRef<number>();
+  // Fixed: Initialize with 0 to satisfy TypeScript definition expecting 1 argument
+  const transitionFrameRef = useRef<number>(0);
 
   // --- HELPER: SAFE PLAY ---
   const safePlay = async (element: HTMLMediaElement | null) => {
